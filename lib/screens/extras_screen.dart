@@ -177,7 +177,7 @@ class ExtraScreen extends StatelessWidget {
     Card(
       child: ListTile(
         leading: const Icon(Icons.school_outlined),
-        title: const Text('Volver a ver el tutorial'),
+        title: const Text('Volver a ver la introducción'),
         subtitle: const Text('Muestra las tres pantallas iniciales.'),
         onTap: () {
           store.resetTutorial();
