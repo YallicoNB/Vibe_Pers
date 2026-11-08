@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -40,35 +42,89 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int tab = 0;
+  Timer? refreshTimer;
+  bool appActive = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    refreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      if (appActive && widget.store.authenticatedNeighbor != null) {
+        widget.store.refreshRemote();
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    appActive = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.resumed &&
+        widget.store.authenticatedNeighbor != null) {
+      widget.store.refreshRemote();
+    }
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (context, _) {
-      if (!widget.store.tutorialSeen) {
-        return _Tutorial(onDone: widget.store.finishTutorial);
+      if (!widget.store.introSeen) {
+        return _IntroScreens(onDone: widget.store.finishIntro);
       }
       final store = widget.store;
       final pages = [
-        CommunityScreen(store: store),
-        MapScreen(key: ValueKey(store.mapTarget?.id), store: store),
+        CommunityScreen(store: store, isActive: tab == 0),
+        MapScreen(
+          key: ValueKey(store.mapTarget?.id),
+          store: store,
+          isActive: tab == 1,
+        ),
         MarketScreen(
           store: store,
+          isActive: tab == 2,
           onShowOnMap: (Listing listing) {
             store.mapTarget = listing;
             setState(() => tab = 1);
           },
         ),
-        EmergencyScreen(store: store),
+        EmergencyScreen(store: store, isActive: tab == 3),
       ];
       return Scaffold(
         appBar: AppBar(
           title: const Text(
-            'Vibe Pers',
+            'MiBarrio',
             style: TextStyle(fontWeight: FontWeight.w800),
           ),
           actions: [
+            if (store.authenticatedNeighbor != null)
+              IconButton(
+                tooltip: 'Avisos de mi junta',
+                icon: Badge(
+                  isLabelVisible: store.unreadAnnouncementCount > 0,
+                  label: Text(store.unreadAnnouncementCount.toString()),
+                  child: const Icon(Icons.notifications_outlined),
+                ),
+                onPressed: () {
+                  store.refreshRemote();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ExtraScreen(title: 'Mis alertas', store: store),
+                    ),
+                  );
+                },
+              ),
             if (store.authenticatedNeighbor == null)
               IconButton(
                 tooltip: 'Cambiar vecino de prueba',
@@ -152,7 +208,8 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedIndex: tab,
           onDestinationSelected: (i) {
             setState(() => tab = i);
-            if (store.authenticatedNeighbor != null && (i == 1 || i == 2)) {
+            if (store.authenticatedNeighbor != null &&
+                (i == 0 || i == 1 || i == 2)) {
               store.refreshRemote();
             }
           },
@@ -233,14 +290,14 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 }
 
-class _Tutorial extends StatefulWidget {
-  const _Tutorial({required this.onDone});
+class _IntroScreens extends StatefulWidget {
+  const _IntroScreens({required this.onDone});
   final VoidCallback onDone;
   @override
-  State<_Tutorial> createState() => _TutorialState();
+  State<_IntroScreens> createState() => _TutorialState();
 }
 
-class _TutorialState extends State<_Tutorial> {
+class _TutorialState extends State<_IntroScreens> {
   int page = 0;
   final items = const [
     (

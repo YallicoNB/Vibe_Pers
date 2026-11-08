@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibe_pers/core/demo_store.dart';
 import 'package:vibe_pers/core/demo_emergency.dart';
+import 'package:vibe_pers/core/risk_map_documents.dart';
 import 'package:vibe_pers/core/community_geometry.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:vibe_pers/core/models.dart';
@@ -43,6 +45,54 @@ void main() {
     );
   });
 
+  test('solo el líder local publica y asigna un grupo por pato', () async {
+    final store = await DemoStore.load();
+    store.switchUser('ana');
+    expect(store.currentUser.isLeader, isFalse);
+    await expectLater(
+      store.publishAnnouncement(
+        kind: 'GENERAL',
+        title: 'Reunión vecinal',
+        body: 'Traigan sus propuestas para mejorar la zona.',
+      ),
+      throwsStateError,
+    );
+    store.switchUser('luis');
+    expect(store.currentUser.isLeader, isTrue);
+    final maria = DemoStore.neighbors.firstWhere((n) => n.id == 'maria');
+    await store.assignGroup(maria, 'BRIGADA');
+    expect(store.groupOf(maria), 'BRIGADA');
+    await store.assignGroup(maria, 'DONADORES');
+    expect(store.groupOf(maria), 'DONADORES');
+    await store.publishAnnouncement(
+      kind: 'EMERGENCY',
+      title: 'Alerta en el sector',
+      body: 'Diríjanse al punto de encuentro indicado por la junta.',
+    );
+    store.switchUser('ana');
+    expect(store.communityAnnouncements.single.isEmergency, isTrue);
+    expect(store.unreadAnnouncementCount, 1);
+    await store.markAnnouncementRead(store.communityAnnouncements.single);
+    expect(store.unreadAnnouncementCount, 0);
+    store.switchUser('jose');
+    expect(store.communityAnnouncements, isEmpty);
+  });
+
+  test('el rol de un perfil conectado no se concede por defecto', () async {
+    final store = await DemoStore.load();
+    const c = Community(
+      id: 'demo-rol',
+      name: 'Prueba',
+      area: 'Zona',
+      lat: -11.98,
+      lng: -76.77,
+    );
+    store.bindProfile('usuario-nuevo', 'Vecino nuevo', c, const []);
+    expect(store.currentUser.isLeader, isFalse);
+    store.bindProfile('usuario-lider', 'Líder', c, const [], isLeader: true);
+    expect(store.currentUser.isLeader, isTrue);
+  });
+
   test('el filtro espacial excluye negocios fuera de la junta', () {
     const boundary = [LatLng(0, 0), LatLng(0, 1), LatLng(1, 1), LatLng(1, 0)];
     expect(pointInBoundary(boundary, 0.5, 0.5), isTrue);
@@ -67,19 +117,31 @@ void main() {
     final reloaded = await DemoStore.load();
     expect(reloaded.restoreCachedProfile('usuario-prueba'), isTrue);
     expect(reloaded.community.id, 'junta-real');
-    expect(reloaded.currentUser.isLeader, isTrue);
+    expect(reloaded.currentUser.isLeader, isFalse);
     expect(reloaded.localListings.length, greaterThanOrEqualTo(2));
   });
 
-  test('el PDF del distrito elegido aparece primero', () {
+  test('los tres mapas del distrito elegido aparecen primero', () {
     final chosica = demoAreas.firstWhere(
       (area) => area.name == 'Lurigancho-Chosica',
     );
-    expect(orderedDemoAreas(chosica).first.name, 'Lurigancho-Chosica');
+    final documents = orderedRiskMapDocuments(chosica);
+    expect(documents.length, 9);
     expect(
-      orderedDemoAreas(chosica).map((area) => area.pdfAsset).toSet().length,
-      3,
+      documents
+          .take(3)
+          .every((document) => document.district == 'Lurigancho-Chosica'),
+      isTrue,
     );
+    expect(documents.map((document) => document.assetPath).toSet().length, 9);
+  });
+
+  testWidgets('los nueve mapas se incluyen como PDF en la app', (tester) async {
+    for (final document in riskMapDocuments) {
+      final pdf = await rootBundle.load(document.assetPath);
+      expect(pdf.lengthInBytes, greaterThan(100000));
+      expect(String.fromCharCodes(pdf.buffer.asUint8List(0, 5)), '%PDF-');
+    }
   });
 
   test('la información de Chaclacayo se elige cerca de Chaclacayo', () {
@@ -141,9 +203,23 @@ void main() {
     await tester.pumpWidget(VibePersApp(store: store));
     await tester.tap(find.text('Omitir'));
     await tester.pumpAndSettle();
+
+    // Al cerrar la intro, saltará el nuevo diálogo del tutorial de la comunidad. Lo omitimos también.
+    if (find.text('Omitir').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Omitir').last);
+      await tester.pumpAndSettle();
+    }
+
     expect(find.text('Mi comunidad'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.storefront_outlined).last);
     await tester.pumpAndSettle();
+
+    // Al entrar a Mercado saltará su respectivo tutorial. Lo omitimos.
+    if (find.text('Omitir').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Omitir').last);
+      await tester.pumpAndSettle();
+    }
+
     expect(find.text('Mercado y solidaridad'), findsOneWidget);
   });
 
@@ -151,9 +227,18 @@ void main() {
     final store = await DemoStore.load();
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: EmergencyScreen(store: store)),
+        // SOLUCIÓN: Agregamos isActive: true para que el constructor coincida
+        home: Scaffold(body: EmergencyScreen(store: store, isActive: true)),
       ),
     );
+
+    // Omitimos el cuadro de diálogo del tutorial que aparece al cargar la pantalla
+    await tester.pumpAndSettle();
+    if (find.text('Omitir').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Omitir').last);
+      await tester.pumpAndSettle();
+    }
+
     await Scrollable.ensureVisible(
       tester.element(find.byIcon(Icons.sos)),
       alignment: 0.5,
@@ -184,5 +269,7 @@ void main() {
     expect(find.text('SIMULACIÓN SOS ACTIVA'), findsOneWidget);
     await third.up();
     await fourth.up();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 }

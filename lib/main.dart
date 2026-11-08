@@ -21,7 +21,7 @@ class VibePersApp extends StatelessWidget {
   final bool authEnabled;
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Vibe Pers',
+    title: 'MiBarrio',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,

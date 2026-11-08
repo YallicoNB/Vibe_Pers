@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'community_geometry.dart';
 import 'demo_emergency.dart';
+import 'community_updates.dart';
 
 class DemoStore extends ChangeNotifier {
   DemoStore._(this._prefs);
@@ -72,7 +73,7 @@ class DemoStore extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final store = DemoStore._(prefs);
     store.currentUserId = prefs.getString('currentUserId') ?? 'ana';
-    store.tutorialSeen = prefs.getBool('tutorialSeen') ?? false;
+    store.introSeen = prefs.getBool('introSeen') ?? false;
     try {
       final rawListings = prefs.getString('listings');
       store.listings = rawListings == null
@@ -94,11 +95,31 @@ class DemoStore extends ChangeNotifier {
       store.listings = store._seedListings();
       store.helpPosts = store._seedHelp();
     }
+    final savedGroups = prefs.getString('local_community_groups');
+    if (savedGroups != null) {
+      try {
+        store.localGroups = Map<String, String>.from(
+          jsonDecode(savedGroups) as Map,
+        );
+      } catch (_) {}
+    }
+    final savedAnnouncements = prefs.getString('local_community_announcements');
+    if (savedAnnouncements != null) {
+      try {
+        store.localAnnouncements = (jsonDecode(savedAnnouncements) as List)
+            .map(
+              (row) => CommunityAnnouncement.fromJson(
+                Map<String, dynamic>.from(row as Map),
+              ),
+            )
+            .toList();
+      } catch (_) {}
+    }
     return store;
   }
 
   late String currentUserId;
-  bool tutorialSeen = false;
+  bool introSeen = false;
   List<Listing> listings = [];
   List<HelpPost> helpPosts = [];
   Neighbor? authenticatedNeighbor;
@@ -107,6 +128,11 @@ class DemoStore extends ChangeNotifier {
   List<Listing> remoteListings = [];
   List<Map<String, dynamic>> remoteResources = [];
   Map<String, Neighbor> remoteNeighbors = {};
+  Map<String, String> remoteGroups = {};
+  Map<String, String> localGroups = {};
+  List<CommunityAnnouncement> remoteAnnouncements = [];
+  List<CommunityAnnouncement> localAnnouncements = [];
+  Set<String> readAnnouncementIds = {};
   String? remoteError;
   Listing? mapTarget;
   DemoEmergencyArea? selectedEmergencyArea;
@@ -182,8 +208,9 @@ class DemoStore extends ChangeNotifier {
     String id,
     String name,
     Community remoteCommunity,
-    List<LatLng> boundary,
-  ) {
+    List<LatLng> boundary, {
+    bool isLeader = false,
+  }) {
     activeCommunity = remoteCommunity;
     communityBoundary = boundary;
     authenticatedNeighbor = Neighbor(
@@ -191,10 +218,13 @@ class DemoStore extends ChangeNotifier {
       name: name,
       communityId: remoteCommunity.id,
       avatar: '🦆',
-      isLeader: true,
+      isLeader: isLeader,
     );
     currentUserId = id;
     remoteNeighbors = {id: authenticatedNeighbor!};
+    remoteGroups = {};
+    remoteAnnouncements = [];
+    readAnnouncementIds = {};
     remoteListings = [];
     remoteResources = [];
     final cachedData = _prefs.getString('community_data_${remoteCommunity.id}');
@@ -207,6 +237,17 @@ class DemoStore extends ChangeNotifier {
         remoteResources = (data['resources'] as List)
             .map((e) => Map<String, dynamic>.from(e as Map))
             .toList();
+        remoteGroups = Map<String, String>.from(data['groups'] as Map? ?? {});
+        remoteAnnouncements = (data['announcements'] as List? ?? [])
+            .map(
+              (e) => CommunityAnnouncement.fromJson(
+                Map<String, dynamic>.from(e as Map),
+              ),
+            )
+            .toList();
+        readAnnouncementIds = (data['readIds'] as List? ?? [])
+            .cast<String>()
+            .toSet();
         for (final p in data['people'] as List) {
           final row = Map<String, dynamic>.from(p as Map);
           remoteNeighbors[row['id'] as String] = Neighbor(
@@ -214,7 +255,9 @@ class DemoStore extends ChangeNotifier {
             name: row['display_name'] as String,
             communityId: remoteCommunity.id,
             avatar: '🦆',
-            isLeader: row['id'] == id || row['role'] == 'LIDER_VECINAL',
+            isLeader:
+                row['role'] == 'LIDER_VECINAL' &&
+                row['leader_community_id'] == remoteCommunity.id,
           );
         }
       } catch (_) {
@@ -222,6 +265,7 @@ class DemoStore extends ChangeNotifier {
         remoteResources = [];
       }
     }
+    remoteNeighbors[id] = authenticatedNeighbor!;
     _prefs.setString(
       'profile_$id',
       jsonEncode({
@@ -246,9 +290,23 @@ class DemoStore extends ChangeNotifier {
     try {
       final people = await client
           .from('profiles')
-          .select('id,display_name,role')
+          .select('id,display_name,role,leader_community_id')
           .eq('community_id', cid)
           .eq('status', 'ACTIVO');
+      final groups = await client
+          .from('community_groups')
+          .select('member_id,demo_key,group_code')
+          .eq('community_id', cid);
+      final announcements = await client
+          .from('community_announcements')
+          .select()
+          .eq('community_id', cid)
+          .eq('status', 'ACTIVE')
+          .order('created_at', ascending: false);
+      final reads = await client
+          .from('community_announcement_reads')
+          .select('announcement_id')
+          .eq('user_id', currentUserId);
       final raw = await client
           .from('listings')
           .select()
@@ -305,15 +363,35 @@ class DemoStore extends ChangeNotifier {
             name: p['display_name'] as String,
             communityId: cid,
             avatar: '🦆',
-            isLeader: p['id'] == currentUserId || p['role'] == 'LIDER_VECINAL',
+            isLeader:
+                p['role'] == 'LIDER_VECINAL' && p['leader_community_id'] == cid,
           ),
       };
+      authenticatedNeighbor =
+          remoteNeighbors[currentUserId] ?? authenticatedNeighbor;
+      remoteGroups = {
+        for (final group in groups)
+          (group['member_id'] ?? group['demo_key']) as String:
+              group['group_code'] as String,
+      };
+      remoteAnnouncements = announcements
+          .map(
+            (row) =>
+                CommunityAnnouncement.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList();
+      readAnnouncementIds = reads
+          .map((row) => row['announcement_id'] as String)
+          .toSet();
       remoteListings = loaded;
       remoteResources = List<Map<String, dynamic>>.from(resources);
       _prefs.setString(
         'community_data_$cid',
         jsonEncode({
           'people': people,
+          'groups': remoteGroups,
+          'announcements': remoteAnnouncements.map((a) => a.toJson()).toList(),
+          'readIds': readAnnouncementIds.toList(),
           'listings': loaded.map((l) => l.toJson()).toList(),
           'resources': resources,
         }),
@@ -326,6 +404,207 @@ class DemoStore extends ChangeNotifier {
     }
   }
 
+  String? groupOf(Neighbor neighbor) => authenticatedNeighbor == null
+      ? localGroups['${community.id}:${neighbor.id}']
+      : remoteGroups[neighbor.id];
+
+  List<CommunityAnnouncement> get communityAnnouncements {
+    final now = DateTime.now();
+    final source = authenticatedNeighbor == null
+        ? localAnnouncements
+        : remoteAnnouncements;
+    return source
+        .where(
+          (announcement) =>
+              announcement.communityId == community.id &&
+              (announcement.expiresAt == null ||
+                  announcement.expiresAt!.isAfter(now)),
+        )
+        .toList()
+      ..sort((a, b) {
+        if (a.isEmergency != b.isEmergency) return a.isEmergency ? -1 : 1;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+  }
+
+  bool isAnnouncementRead(CommunityAnnouncement announcement) {
+    if (announcement.authorId == currentUserId) return true;
+    if (authenticatedNeighbor == null) {
+      return (_prefs.getStringList('local_announcement_reads_$currentUserId') ??
+              [])
+          .contains(announcement.id);
+    }
+    return readAnnouncementIds.contains(announcement.id);
+  }
+
+  int get unreadAnnouncementCount {
+    final reads = authenticatedNeighbor == null
+        ? (_prefs.getStringList('local_announcement_reads_$currentUserId') ??
+                  [])
+              .toSet()
+        : readAnnouncementIds;
+    return communityAnnouncements
+        .where(
+          (announcement) =>
+              announcement.authorId != currentUserId &&
+              !reads.contains(announcement.id),
+        )
+        .length;
+  }
+
+  Future<void> assignGroup(Neighbor neighbor, String? code) async {
+    if (!currentUser.isLeader ||
+        neighbor.isLeader ||
+        neighbor.id == currentUserId ||
+        neighbor.communityId != community.id ||
+        (code != null && !communityGroupLabels.containsKey(code))) {
+      throw StateError('Solo el líder puede asignar vecinos de su junta.');
+    }
+    if (authenticatedNeighbor == null) {
+      final key = '${community.id}:${neighbor.id}';
+      if (code == null) {
+        localGroups.remove(key);
+      } else {
+        localGroups[key] = code;
+      }
+      await _prefs.setString('local_community_groups', jsonEncode(localGroups));
+      notifyListeners();
+      return;
+    }
+    final isDemo = neighbor.id.startsWith('demo-');
+    await Supabase.instance.client.rpc(
+      'assign_community_group',
+      params: {
+        'p_member_id': isDemo ? null : neighbor.id,
+        'p_demo_key': isDemo ? neighbor.id : null,
+        'p_group_code': code,
+      },
+    );
+    if (code == null) {
+      remoteGroups.remove(neighbor.id);
+    } else {
+      remoteGroups[neighbor.id] = code;
+    }
+    notifyListeners();
+    await refreshRemote();
+  }
+
+  Future<void> publishAnnouncement({
+    required String kind,
+    required String title,
+    required String body,
+    DateTime? meetingAt,
+    String? meetingPlace,
+  }) async {
+    if (!currentUser.isLeader) {
+      throw StateError('Solo el líder puede publicar avisos.');
+    }
+    if (authenticatedNeighbor == null) {
+      localAnnouncements.add(
+        CommunityAnnouncement(
+          id: newId(),
+          communityId: community.id,
+          authorId: currentUserId,
+          kind: kind,
+          title: title.trim(),
+          body: body.trim(),
+          createdAt: DateTime.now(),
+          meetingAt: meetingAt,
+          meetingPlace: meetingPlace,
+          expiresAt: kind == 'EMERGENCY'
+              ? DateTime.now().add(const Duration(hours: 24))
+              : null,
+        ),
+      );
+      await _prefs.setString(
+        'local_community_announcements',
+        jsonEncode(
+          localAnnouncements
+              .map((announcement) => announcement.toJson())
+              .toList(),
+        ),
+      );
+      notifyListeners();
+      return;
+    }
+    final createdId = await Supabase.instance.client.rpc(
+      'create_community_announcement',
+      params: {
+        'p_kind': kind,
+        'p_title': title.trim(),
+        'p_body': body.trim(),
+        'p_meeting_at': meetingAt?.toUtc().toIso8601String(),
+        'p_meeting_place': meetingPlace?.trim(),
+      },
+    );
+    remoteAnnouncements.insert(
+      0,
+      CommunityAnnouncement(
+        id: createdId as String,
+        communityId: community.id,
+        authorId: currentUserId,
+        kind: kind,
+        title: title.trim(),
+        body: body.trim(),
+        createdAt: DateTime.now(),
+        meetingAt: meetingAt,
+        meetingPlace: meetingPlace,
+        expiresAt: kind == 'EMERGENCY'
+            ? DateTime.now().add(const Duration(hours: 24))
+            : null,
+      ),
+    );
+    notifyListeners();
+    await refreshRemote();
+  }
+
+  Future<void> closeAnnouncement(CommunityAnnouncement announcement) async {
+    if (!currentUser.isLeader || announcement.communityId != community.id) {
+      throw StateError('Solo el líder puede cerrar avisos de su junta.');
+    }
+    if (authenticatedNeighbor == null) {
+      localAnnouncements.removeWhere((a) => a.id == announcement.id);
+      await _prefs.setString(
+        'local_community_announcements',
+        jsonEncode(localAnnouncements.map((a) => a.toJson()).toList()),
+      );
+      notifyListeners();
+      return;
+    }
+    await Supabase.instance.client.rpc(
+      'close_community_announcement',
+      params: {'p_id': announcement.id},
+    );
+    remoteAnnouncements.removeWhere((a) => a.id == announcement.id);
+    notifyListeners();
+    await refreshRemote();
+  }
+
+  Future<void> markAnnouncementRead(CommunityAnnouncement announcement) async {
+    if (authenticatedNeighbor == null) {
+      final key = 'local_announcement_reads_$currentUserId';
+      final reads = (_prefs.getStringList(key) ?? []).toSet()
+        ..add(announcement.id);
+      await _prefs.setStringList(key, reads.toList());
+    } else {
+      await Supabase.instance.client.rpc(
+        'mark_community_announcement_read',
+        params: {'p_id': announcement.id},
+      );
+      readAnnouncementIds.add(announcement.id);
+      final cacheKey = 'community_data_${community.id}';
+      final cached = _prefs.getString(cacheKey);
+      if (cached != null) {
+        try {
+          final data = Map<String, dynamic>.from(jsonDecode(cached) as Map);
+          data['readIds'] = readAnnouncementIds.toList();
+          await _prefs.setString(cacheKey, jsonEncode(data));
+        } catch (_) {}
+      }
+    }
+    notifyListeners();
+  }
+
   void clearProfile() {
     authenticatedNeighbor = null;
     activeCommunity = null;
@@ -333,6 +612,9 @@ class DemoStore extends ChangeNotifier {
     remoteListings = [];
     remoteResources = [];
     remoteNeighbors = {};
+    remoteGroups = {};
+    remoteAnnouncements = [];
+    readAnnouncementIds = {};
     remoteError = null;
     currentUserId = 'ana';
     notifyListeners();
@@ -342,21 +624,14 @@ class DemoStore extends ChangeNotifier {
       ? []
       : [
           Neighbor(
-            id: 'demo-leader',
-            name: 'Coordinación de prueba',
-            communityId: community.id,
-            avatar: '🦆',
-            isLeader: true,
-          ),
-          Neighbor(
             id: 'demo-rosa',
-            name: 'Rosa (ejemplo)',
+            name: 'Rosa',
             communityId: community.id,
             avatar: '🦆',
           ),
           Neighbor(
             id: 'demo-carlos',
-            name: 'Carlos (ejemplo)',
+            name: 'Carlos',
             communityId: community.id,
             avatar: '🦆',
           ),
@@ -413,15 +688,15 @@ class DemoStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void finishTutorial() {
-    tutorialSeen = true;
-    _prefs.setBool('tutorialSeen', true);
+  void finishIntro() {
+    introSeen = true;
+    _prefs.setBool('introSeen', true);
     notifyListeners();
   }
 
-  void resetTutorial() {
-    tutorialSeen = false;
-    _prefs.setBool('tutorialSeen', false);
+  void resetIntro() {
+    introSeen = false;
+    _prefs.setBool('introSeen', false);
     notifyListeners();
   }
 
