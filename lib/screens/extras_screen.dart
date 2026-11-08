@@ -180,7 +180,7 @@ class ExtraScreen extends StatelessWidget {
         title: const Text('Volver a ver la introducción'),
         subtitle: const Text('Muestra las tres pantallas iniciales.'),
         onTap: () {
-          store.resetTutorial();
+          store.resetIntro();
           Navigator.pop(context);
         },
       ),

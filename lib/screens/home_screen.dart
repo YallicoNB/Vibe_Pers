@@ -46,8 +46,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (context, _) {
-      if (!widget.store.tutorialSeen) {
-        return _Tutorial(onDone: widget.store.finishTutorial);
+      if (!widget.store.introSeen) {
+        return _IntroScreens(onDone: widget.store.finishIntro);
       }
       final store = widget.store;
       final pages = [
@@ -233,14 +233,14 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 }
 
-class _Tutorial extends StatefulWidget {
-  const _Tutorial({required this.onDone});
+class _IntroScreens extends StatefulWidget {
+  const _IntroScreens({required this.onDone});
   final VoidCallback onDone;
   @override
-  State<_Tutorial> createState() => _TutorialState();
+  State<_IntroScreens> createState() => _TutorialState();
 }
 
-class _TutorialState extends State<_Tutorial> {
+class _TutorialState extends State<_IntroScreens> {
   int page = 0;
   final items = const [
     (

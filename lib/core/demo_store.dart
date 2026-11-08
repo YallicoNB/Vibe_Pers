@@ -72,7 +72,7 @@ class DemoStore extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final store = DemoStore._(prefs);
     store.currentUserId = prefs.getString('currentUserId') ?? 'ana';
-    store.tutorialSeen = prefs.getBool('tutorialSeen') ?? false;
+    store.introSeen = prefs.getBool('introSeen') ?? false;
     try {
       final rawListings = prefs.getString('listings');
       store.listings = rawListings == null
@@ -98,7 +98,7 @@ class DemoStore extends ChangeNotifier {
   }
 
   late String currentUserId;
-  bool tutorialSeen = false;
+  bool introSeen = false;
   List<Listing> listings = [];
   List<HelpPost> helpPosts = [];
   Neighbor? authenticatedNeighbor;
@@ -413,15 +413,15 @@ class DemoStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void finishTutorial() {
-    tutorialSeen = true;
-    _prefs.setBool('tutorialSeen', true);
+  void finishIntro() {
+    introSeen = true;
+    _prefs.setBool('introSeen', true);
     notifyListeners();
   }
 
-  void resetTutorial() {
-    tutorialSeen = false;
-    _prefs.setBool('tutorialSeen', false);
+  void resetIntro() {
+    introSeen = false;
+    _prefs.setBool('introSeen', false);
     notifyListeners();
   }
 
