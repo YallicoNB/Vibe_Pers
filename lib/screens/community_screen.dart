@@ -5,8 +5,9 @@ import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../core/demo_store.dart';
 
 class CommunityScreen extends StatefulWidget {
-  const CommunityScreen({super.key, required this.store});
+  const CommunityScreen({super.key, required this.store, required this.isActive});
   final DemoStore store;
+  final bool isActive; // NUEVO
 
   @override
   State<CommunityScreen> createState() => _CommunityScreenState();
@@ -15,7 +16,6 @@ class CommunityScreen extends StatefulWidget {
 class _CommunityScreenState extends State<CommunityScreen> {
   late TutorialCoachMark tutorialCoachMark;
 
-  // Llaves para identificar qué elementos resaltar
   final GlobalKey _communityInfoKey = GlobalKey();
   final GlobalKey _leadersKey = GlobalKey();
   final GlobalKey _noticesKey = GlobalKey();
@@ -23,9 +23,18 @@ class _CommunityScreenState extends State<CommunityScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkTutorial();
-    });
+    if (widget.isActive) { // SOLO SI ESTÁ ACTIVA AL INICIAR
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkTutorial());
+    }
+  }
+
+  // NUEVO: ESCUCHA CUANDO CAMBIAS DE PESTAÑA
+  @override
+  void didUpdateWidget(covariant CommunityScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkTutorial());
+    }
   }
 
   Future<void> _checkTutorial() async {

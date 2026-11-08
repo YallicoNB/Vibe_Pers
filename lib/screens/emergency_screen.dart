@@ -4,20 +4,27 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 import '../core/demo_store.dart';
 import '../core/demo_emergency.dart';
 import 'evacuation_documents.dart';
 
 class EmergencyScreen extends StatefulWidget {
-  const EmergencyScreen({super.key, required this.store});
+  const EmergencyScreen({super.key, required this.store, required this.isActive});
   final DemoStore store;
+  final bool isActive; // NUEVO
+
   @override
   State<EmergencyScreen> createState() => _EmergencyScreenState();
 }
 
 class _EmergencyScreenState extends State<EmergencyScreen> {
   final sosKey = GlobalKey();
+  final _contactsKey = GlobalKey();
+  late TutorialCoachMark tutorialCoachMark;
+
   final pointers = <int>{};
   Timer? holdTimer;
   Timer? tickTimer;
@@ -28,19 +35,151 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
   @override
   void initState() {
     super.initState();
-    Geolocator.getLastKnownPosition()
-        .then((p) {
-          if (mounted && p != null) setState(() => position = p);
-        })
-        .catchError((Object _) {});
+    Geolocator.getLastKnownPosition().then((p) {
+      if (mounted && p != null) setState(() => position = p);
+    }).catchError((Object _) {});
+
+    if (widget.isActive) { // SOLO SI ESTÁ ACTIVA AL INICIAR
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkTutorial());
+    }
   }
 
+  // NUEVO: ESCUCHA CUANDO CAMBIAS DE PESTAÑA
   @override
-  void dispose() {
-    holdTimer?.cancel();
-    tickTimer?.cancel();
-    super.dispose();
+  void didUpdateWidget(covariant EmergencyScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkTutorial());
+    }
   }
+
+  Future<void> _checkTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenTutorial = prefs.getBool('tut_emergency') ?? false;
+
+    if (!hasSeenTutorial && mounted) {
+      _showTutorialDialog(prefs);
+    }
+  }
+
+  void _showTutorialDialog(SharedPreferences prefs) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Prevención y Alertas'),
+        content: const Text(
+            '¿Deseas ver un recorrido rápido sobre cómo emitir una alerta SOS y ver recursos?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              prefs.setBool('tut_emergency', true);
+              Navigator.pop(context);
+            },
+            child: const Text('Omitir'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _initTutorial(prefs);
+            },
+            child: const Text('Empezar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _initTutorial(SharedPreferences prefs) {
+    tutorialCoachMark = TutorialCoachMark(
+      targets: _createTargets(),
+      colorShadow: const Color(0xFF901B1B),
+      textSkip: "Omitir",
+      paddingFocus: 10,
+      opacityShadow: 0.9,
+      onFinish: () {
+        prefs.setBool('tut_emergency', true);
+      },
+      onClickTarget: (target) {
+        // SOLUCIÓN: Si tocamos la luz del botón SOS, hacemos scroll hacia abajo
+        if (target.identify == "sosButton") {
+          if (_contactsKey.currentContext != null) {
+            Scrollable.ensureVisible(
+              _contactsKey.currentContext!,
+              alignment: 0.5, // El 0.5 asegura que el elemento quede justo en el centro de la pantalla
+              duration: const Duration(milliseconds: 200), // Pequeña animación para que se vea fluido
+            );
+          }
+        }
+        tutorialCoachMark.next();
+      },
+      onSkip: () {
+        prefs.setBool('tut_emergency', true);
+        return true;
+      },
+    )..show(context: context);
+  }
+
+  List<TargetFocus> _createTargets() {
+    return [
+      TargetFocus(
+        identify: "sosButton",
+        keyTarget: sosKey,
+        shape: ShapeLightFocus.Circle,
+        radius: 10,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Botón SOS Protegido",
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Para evitar alertas falsas (regla de MVP), debes presionar con DOS DEDOS simultáneamente durante 2 SEGUNDOS continuos.\n\n(Toca la luz para continuar)",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+      TargetFocus(
+        identify: "contacts",
+        keyTarget: _contactsKey,
+        shape: ShapeLightFocus.RRect,
+        radius: 12,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Recursos Oficiales",
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Aquí encontrarás números de emergencia pre-cargados. Al presionarlos, abrirán directamente el marcador de tu celular.\n\n(Toca la luz para finalizar el tutorial)",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    ];
+  }
+
+  // --- LÓGICA DE EMERGENCIA ORIGINAL ---
 
   bool get active => expiresAt != null && DateTime.now().isBefore(expiresAt!);
   bool _insideSos(Offset globalPosition) {
@@ -122,11 +261,11 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
   Widget build(BuildContext context) {
     final area =
         widget.store.selectedEmergencyArea ??
-        closestDemoArea(
-          position == null
-              ? LatLng(widget.store.community.lat, widget.store.community.lng)
-              : LatLng(position!.latitude, position!.longitude),
-        );
+            closestDemoArea(
+              position == null
+                  ? LatLng(widget.store.community.lat, widget.store.community.lng)
+                  : LatLng(position!.latitude, position!.longitude),
+            );
     final minutes = active
         ? expiresAt!.difference(DateTime.now()).inSeconds
         : 0;
@@ -188,7 +327,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                         const SizedBox(width: 10),
                         FilledButton.tonal(
                           onPressed: () => setState(
-                            () => expiresAt = expiresAt!.add(
+                                () => expiresAt = expiresAt!.add(
                               const Duration(minutes: 15),
                             ),
                           ),
@@ -209,7 +348,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               child: Semantics(
                 label: 'SOS de demostración. Mantén dos dedos durante dos segundos.',
                 child: AnimatedContainer(
-                  key: sosKey,
+                  key: sosKey, // La llave del botón SOS (ya estaba, se reutiliza para el tutorial)
                   duration: const Duration(milliseconds: 200),
                   width: 180,
                   height: 180,
@@ -275,9 +414,19 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
             'El botón abre el marcador. La llamada depende de tu red telefónica.',
           ),
           const SizedBox(height: 6),
-          _contact('Policía Nacional', '105', Icons.local_police_outlined),
-          _contact('Bomberos', '116', Icons.fire_truck_outlined),
-          _contact('SAMU', '106', Icons.medical_services_outlined),
+
+          // --- AQUÍ APLICAMOS LA LLAVE A LOS CONTACTOS ---
+          Container(
+            key: _contactsKey,
+            child: Column(
+              children: [
+                _contact('Policía Nacional', '105', Icons.local_police_outlined),
+                _contact('Bomberos', '116', Icons.fire_truck_outlined),
+                _contact('SAMU', '106', Icons.medical_services_outlined),
+              ],
+            ),
+          ),
+
           TextButton(
             onPressed: () => launchUrl(
               Uri.parse('https://www.gob.pe/547-telefonos-de-emergencia'),

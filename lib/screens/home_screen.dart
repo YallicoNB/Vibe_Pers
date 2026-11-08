@@ -51,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       final store = widget.store;
       final pages = [
-        CommunityScreen(store: store),
+        CommunityScreen(store: store, isActive: tab == 0), // NUEVO
         MapScreen(key: ValueKey(store.mapTarget?.id), store: store),
         MarketScreen(
           store: store,
@@ -60,7 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() => tab = 1);
           },
         ),
-        EmergencyScreen(store: store),
+        EmergencyScreen(store: store, isActive: tab == 3), // NUEVO
       ];
       return Scaffold(
         appBar: AppBar(
