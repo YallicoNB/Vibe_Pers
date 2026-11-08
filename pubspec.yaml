@@ -1,5 +1,5 @@
 name: vibe_pers
-description: "Prototipo vecinal Flutter de Vibe Pers para Android e iOS."
+description: "Prototipo vecinal Flutter de MiBarrio para Android e iOS."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.13.7
@@ -68,7 +68,15 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - assets/evacuation/
+    - assets/evacuation/chaclacayo_el_cuadro.pdf
+    - assets/evacuation/chaclacayo_santa_ines.pdf
+    - assets/evacuation/chaclacayo_valle_hermoso.pdf
+    - assets/evacuation/chosica_la_libertad.pdf
+    - assets/evacuation/chosica_el_pedregal.pdf
+    - assets/evacuation/chosica_quirio.pdf
+    - assets/evacuation/ate_estrella_andina.pdf
+    - assets/evacuation/ate_gloria_chica.pdf
+    - assets/evacuation/ate_san_juan.pdf
     - assets/Logo_vibePers.jpeg
 
   # To add assets to your application, add an assets section, like this:

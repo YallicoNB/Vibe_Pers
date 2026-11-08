@@ -1,19 +1,9 @@
 import 'package:latlong2/latlong.dart';
 
 class DemoEmergencyArea {
-  const DemoEmergencyArea(
-    this.name,
-    this.center,
-    this.sourceTitle,
-    this.sourceUrl,
-  );
-  final String name, sourceTitle, sourceUrl;
+  const DemoEmergencyArea(this.name, this.center);
+  final String name;
   final LatLng center;
-  String get pdfAsset => switch (name) {
-    'Chaclacayo' => 'assets/evacuation/chaclacayo.pdf',
-    'Lurigancho-Chosica' => 'assets/evacuation/lurigancho_chosica.pdf',
-    _ => 'assets/evacuation/ate.pdf',
-  };
   List<String> get streetReferences => switch (name) {
     'Chaclacayo' => const [
       'Av. Nicolás Ayllón',
@@ -41,24 +31,9 @@ class DemoEmergencyArea {
 }
 
 const demoAreas = [
-  DemoEmergencyArea(
-    'Chaclacayo',
-    LatLng(-11.976, -76.767),
-    'Plan de riesgo Chaclacayo 2023–2027',
-    'https://www.gob.pe/institucion/munichaclacayo/normas-legales/4994128-184-2023-alc-mdch',
-  ),
-  DemoEmergencyArea(
-    'Lurigancho-Chosica',
-    LatLng(-11.938, -76.696),
-    'Mapa El Pedregal, INDECI (2015)',
-    'https://portal.indeci.gob.pe/wp-content/uploads/2018/09/Chosica.pdf',
-  ),
-  DemoEmergencyArea(
-    'Ate',
-    LatLng(-12.029, -76.919),
-    'Plan de riesgo Ate 2025–2030',
-    'https://www.muniate.gob.pe/tu-municipalidad/',
-  ),
+  DemoEmergencyArea('Chaclacayo', LatLng(-11.976, -76.767)),
+  DemoEmergencyArea('Lurigancho-Chosica', LatLng(-11.938, -76.696)),
+  DemoEmergencyArea('Ate', LatLng(-12.029, -76.919)),
 ];
 
 DemoEmergencyArea closestDemoArea(LatLng position) {

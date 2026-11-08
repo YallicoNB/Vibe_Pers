@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/demo_store.dart';
 import 'market_screen.dart';
+import 'announcement_tile.dart';
 import 'zone_picker_screen.dart';
 
 class ExtraScreen extends StatelessWidget {
@@ -17,36 +18,44 @@ class ExtraScreen extends StatelessWidget {
   final Future<void> Function()? onProfileChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final content = switch (title) {
-      'Mi perfil' => _profile(),
-      'Mis publicaciones' => _listings(),
-      'Mis ayudas' => _helps(),
-      'Mis alertas' => _message(
-        Icons.notifications_none,
-        'No hay alertas compartidas',
-        'El SOS actual es una simulación local. Las alertas reales se habilitarán con el servidor.',
-      ),
-      'Ajustes' => _settings(context),
-      'Cambiar de junta' => _changeCommunity(context),
-      'Información offline' => _message(
-        Icons.offline_bolt_outlined,
-        'Datos guardados en este dispositivo',
-        'Las fichas y ayudas de esta demostración se leen sin internet. El mapa base requiere conexión o teselas vistas anteriormente. Las publicaciones no se envían a otros vecinos.',
-      ),
-      _ => _message(
-        Icons.info_outline,
-        'Vibe Pers',
-        'Prototipo comunitario para Android e iOS. Los datos de ejemplo son ficticios.',
-      ),
-    };
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: SafeArea(
-        child: ListView(padding: const EdgeInsets.all(16), children: content),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: store,
+    builder: (context, _) {
+      final content = switch (title) {
+        'Mi perfil' => _profile(),
+        'Mis publicaciones' => _listings(),
+        'Mis ayudas' => _helps(),
+        'Mis alertas' => _announcements(),
+        'Ajustes' => _settings(context),
+        'Cambiar de junta' => _changeCommunity(context),
+        'Información offline' => _message(
+          Icons.offline_bolt_outlined,
+          'Datos guardados en este dispositivo',
+          'Los avisos ya descargados pueden consultarse sin internet. Publicar avisos y cambiar grupos requiere conexión. El mapa base necesita internet o teselas vistas anteriormente.',
+        ),
+        _ => _message(
+          Icons.info_outline,
+          'MiBarrio',
+          'Prototipo comunitario para Android e iOS. Los datos de ejemplo son ficticios.',
+        ),
+      };
+      return Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: SafeArea(
+          child: ListView(padding: const EdgeInsets.all(16), children: content),
+        ),
+      );
+    },
+  );
+
+  List<Widget> _announcements() => [
+    const Text('Avisos y alertas de tu junta vecinal'),
+    const SizedBox(height: 12),
+    if (store.communityAnnouncements.isEmpty)
+      const Card(child: ListTile(title: Text('Aún no hay avisos'))),
+    for (final announcement in store.communityAnnouncements)
+      AnnouncementTile(store: store, announcement: announcement),
+  ];
 
   List<Widget> _changeCommunity(BuildContext context) => [
     const Card(

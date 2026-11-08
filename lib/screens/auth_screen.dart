@@ -66,7 +66,9 @@ class _AuthGateState extends State<AuthGate> {
     try {
       final profile = await client
           .from('profiles')
-          .select('id,display_name,community_id,status')
+          .select(
+            'id,display_name,community_id,status,role,leader_community_id',
+          )
           .eq('id', user.id)
           .maybeSingle();
       if (!mounted || client.auth.currentUser?.id != user.id) return;
@@ -115,6 +117,9 @@ class _AuthGateState extends State<AuthGate> {
             lng: (c['center_lng'] as num?)?.toDouble() ?? -76.696,
           ),
           boundary,
+          isLeader:
+              profile['role'] == 'LIDER_VECINAL' &&
+              profile['leader_community_id'] == c['id'],
         );
         setState(() {
           hasProfile = true;
@@ -245,7 +250,7 @@ class _AccessScreenState extends State<AccessScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          const Text('Vibe Pers'),
+          const Text('MiBarrio'),
         ],
       ),
     ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -40,8 +42,38 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int tab = 0;
+  Timer? refreshTimer;
+  bool appActive = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    refreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      if (appActive && widget.store.authenticatedNeighbor != null) {
+        widget.store.refreshRemote();
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    appActive = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.resumed &&
+        widget.store.authenticatedNeighbor != null) {
+      widget.store.refreshRemote();
+    }
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
@@ -52,7 +84,11 @@ class _HomeScreenState extends State<HomeScreen> {
       final store = widget.store;
       final pages = [
         CommunityScreen(store: store, isActive: tab == 0),
-        MapScreen(key: ValueKey(store.mapTarget?.id), store: store, isActive: tab == 1),
+        MapScreen(
+          key: ValueKey(store.mapTarget?.id),
+          store: store,
+          isActive: tab == 1,
+        ),
         MarketScreen(
           store: store,
           isActive: tab == 2,
@@ -66,10 +102,29 @@ class _HomeScreenState extends State<HomeScreen> {
       return Scaffold(
         appBar: AppBar(
           title: const Text(
-            'Vibe Pers',
+            'MiBarrio',
             style: TextStyle(fontWeight: FontWeight.w800),
           ),
           actions: [
+            if (store.authenticatedNeighbor != null)
+              IconButton(
+                tooltip: 'Avisos de mi junta',
+                icon: Badge(
+                  isLabelVisible: store.unreadAnnouncementCount > 0,
+                  label: Text(store.unreadAnnouncementCount.toString()),
+                  child: const Icon(Icons.notifications_outlined),
+                ),
+                onPressed: () {
+                  store.refreshRemote();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ExtraScreen(title: 'Mis alertas', store: store),
+                    ),
+                  );
+                },
+              ),
             if (store.authenticatedNeighbor == null)
               IconButton(
                 tooltip: 'Cambiar vecino de prueba',
@@ -153,7 +208,8 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedIndex: tab,
           onDestinationSelected: (i) {
             setState(() => tab = i);
-            if (store.authenticatedNeighbor != null && (i == 1 || i == 2)) {
+            if (store.authenticatedNeighbor != null &&
+                (i == 0 || i == 1 || i == 2)) {
               store.refreshRemote();
             }
           },

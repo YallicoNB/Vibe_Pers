@@ -1,4 +1,4 @@
-# Vibe Pers
+# MiBarrio
 
 Prototipo vecinal en Flutter para Android e iOS. Incluye comunidades delimitadas en mapa, mercado, recomendaciones y una demostración de emergencias. La documentación funcional está en [`docs/`](docs/).
 
@@ -16,7 +16,11 @@ Prototipo vecinal en Flutter para Android e iOS. Incluye comunidades delimitadas
 3. Conecta un teléfono Android con depuración USB o inicia un emulador. Comprueba que aparezca con `flutter devices`.
 4. Ejecuta `flutter run` o abre la carpeta del repositorio en Android Studio y pulsa **Run**.
 
-En Windows, activa el **Modo de desarrollador** si Flutter indica que necesita soporte para enlaces simbólicos. Para generar un APK de prueba, usa `flutter build apk --debug`; quedará en `build/app/outputs/flutter-apk/app-debug.apk`.
+En Windows, activa el **Modo de desarrollador** si Flutter indica que necesita soporte para enlaces simbólicos. Para generar el APK de demostración, usa `flutter build apk --release`; quedará en `build/app/outputs/flutter-apk/app-release.apk`. Esta demo usa la firma de depuración configurada en Gradle; antes de publicar en una tienda se necesitará una firma propia.
+
+## APK para jurados
+
+Descarga `MiBarrio-Android-v1.0.1.apk` desde **Releases** de este repositorio y ábrelo en un teléfono Android. No necesitas Android Studio para instalarlo. La app usa el proyecto Supabase de la demo y requiere internet para las funciones compartidas; los documentos de evacuación incluidos se pueden consultar sin conexión tras iniciar sesión.
 
 ## Ejecutar en iOS
 
@@ -38,4 +42,4 @@ flutter test
 flutter build apk --debug
 ```
 
-El análisis, las 10 pruebas y el APK de depuración pasaron el 7 de noviembre de 2026 en Windows. La documentación sobre fuentes y límites de los mapas está en [`docs/fuentes_evacuacion.md`](docs/fuentes_evacuacion.md).
+El análisis y las 13 pruebas pasaron el 8 de noviembre de 2026 en Windows. La documentación sobre fuentes y límites de los mapas está en [`docs/fuentes_evacuacion.md`](docs/fuentes_evacuacion.md).

@@ -44,6 +44,13 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    holdTimer?.cancel();
+    tickTimer?.cancel();
+    super.dispose();
+  }
+
   // NUEVO: ESCUCHA CUANDO CAMBIAS DE PESTAÑA
   @override
   void didUpdateWidget(covariant EmergencyScreen oldWidget) {
