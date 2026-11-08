@@ -3,6 +3,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 import '../core/demo_store.dart';
 import '../core/demo_emergency.dart';
@@ -12,23 +14,45 @@ import 'market_screen.dart';
 import 'evacuation_documents.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key, required this.store});
+  // AÑADIDO: isActive en el constructor
+  const MapScreen({super.key, required this.store, required this.isActive});
   final DemoStore store;
+  final bool isActive;
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
 
 class _MapScreenState extends State<MapScreen> {
+  // LLAVES PARA EL TUTORIAL
+  final GlobalKey _segmentedControlKey = GlobalKey();
+  final GlobalKey _locationButtonKey = GlobalKey();
+  late TutorialCoachMark tutorialCoachMark;
+
   bool mapMode = true;
   bool emergencyMode = false;
   final MapController mapController = MapController();
+
+  String category = 'Todas';
+  Position? position;
+  String? locationMessage;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _locate();
+      // SOLO SE LANZA SI LA PESTAÑA NACE ACTIVA
+      if (widget.isActive) _checkTutorial();
     });
+  }
+
+  // AÑADIDO: ESCUCHA CUANDO EL USUARIO CAMBIA A ESTA PESTAÑA
+  @override
+  void didUpdateWidget(covariant MapScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkTutorial());
+    }
   }
 
   @override
@@ -37,9 +61,133 @@ class _MapScreenState extends State<MapScreen> {
     super.dispose();
   }
 
-  String category = 'Todas';
-  Position? position;
-  String? locationMessage;
+  // --- LÓGICA DEL TUTORIAL INTERACTIVO ---
+  Future<void> _checkTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenTutorial = prefs.getBool('tut_map') ?? false;
+
+    if (!hasSeenTutorial && mounted) {
+      _showTutorialDialog(prefs);
+    }
+  }
+
+  void _showTutorialDialog(SharedPreferences prefs) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Explora tu Mapa'),
+        content: const Text(
+            '¿Quieres ver cómo cambiar entre negocios locales y rutas de evacuación?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              prefs.setBool('tut_map', true);
+              Navigator.pop(context);
+            },
+            child: const Text('Omitir'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _initTutorial(prefs);
+            },
+            child: const Text('Empezar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _initTutorial(SharedPreferences prefs) {
+    tutorialCoachMark = TutorialCoachMark(
+      targets: _createTargets(),
+      colorShadow: const Color(0xFF126E64),
+      textSkip: "Omitir",
+      paddingFocus: 10,
+      opacityShadow: 0.9,
+      onFinish: () {
+        prefs.setBool('tut_map', true);
+      },
+      onClickTarget: (target) {
+        if (target.identify == "locationButton") {
+          if (_locationButtonKey.currentContext != null) {
+            Scrollable.ensureVisible(
+              _locationButtonKey.currentContext!,
+              alignment: 0.5,
+              duration: const Duration(milliseconds: 200),
+            );
+          }
+        }
+        tutorialCoachMark.next();
+      },
+      onSkip: () {
+        prefs.setBool('tut_map', true);
+        return true;
+      },
+    )..show(context: context);
+  }
+
+  List<TargetFocus> _createTargets() {
+    return [
+      TargetFocus(
+        identify: "segmentedControl",
+        keyTarget: _segmentedControlKey,
+        shape: ShapeLightFocus.RRect,
+        radius: 20, // Bordes redondeados del SegmentedButton
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Filtros de Mapa",
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Cambia entre ver los negocios de tus vecinos o las rutas y zonas de emergencia pre-cargadas.\n\n(Toca la luz para continuar)",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+      TargetFocus(
+        identify: "locationButton",
+        keyTarget: _locationButtonKey,
+        shape: ShapeLightFocus.RRect,
+        radius: 12,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Tu Ubicación",
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Presiona aquí para centrar el mapa en tu ubicación actual y calcular las distancias.\n\n(Toca la luz para finalizar)",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    ];
+  }
+  // --- FIN LÓGICA TUTORIAL ---
+
   Future<void> _locate() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
@@ -75,7 +223,7 @@ class _MapScreenState extends State<MapScreen> {
     } catch (e) {
       if (mounted) {
         setState(
-          () => locationMessage = e.toString().replaceFirst('Exception: ', ''),
+              () => locationMessage = e.toString().replaceFirst('Exception: ', ''),
         );
       }
     }
@@ -85,20 +233,20 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final area =
         widget.store.selectedEmergencyArea ??
-        closestDemoArea(
-          position == null
-              ? LatLng(widget.store.community.lat, widget.store.community.lng)
-              : LatLng(position!.latitude, position!.longitude),
-        );
+            closestDemoArea(
+              position == null
+                  ? LatLng(widget.store.community.lat, widget.store.community.lng)
+                  : LatLng(position!.latitude, position!.longitude),
+            );
     final all = widget.store.localListings;
     final safeResources = widget.store.remoteResources
         .where(
           (r) =>
-              r['lat'] != null &&
-              r['lng'] != null &&
-              r['is_demo'] == false &&
-              r['verified_at'] != null,
-        )
+      r['lat'] != null &&
+          r['lng'] != null &&
+          r['is_demo'] == false &&
+          r['verified_at'] != null,
+    )
         .toList();
     final categories = [
       'Todas',
@@ -124,7 +272,10 @@ class _MapScreenState extends State<MapScreen> {
               : 'Puntos ficticios de ${widget.store.community.name}. No son direcciones reales.',
         ),
         const SizedBox(height: 12),
+
+        // --- LLAVE DEL TUTORIAL AQUÍ ---
         SegmentedButton<bool>(
+          key: _segmentedControlKey,
           segments: const [
             ButtonSegment(
               value: false,
@@ -150,6 +301,7 @@ class _MapScreenState extends State<MapScreen> {
             }
           },
         ),
+
         if (emergencyMode)
           DropdownButton<DemoEmergencyArea>(
             value: area,
@@ -182,7 +334,9 @@ class _MapScreenState extends State<MapScreen> {
         Wrap(
           spacing: 8,
           children: [
+            // --- LLAVE DEL TUTORIAL AQUÍ ---
             OutlinedButton.icon(
+              key: _locationButtonKey,
               onPressed: _locate,
               icon: const Icon(Icons.my_location),
               label: const Text('Usar mi ubicación'),
@@ -206,14 +360,14 @@ class _MapScreenState extends State<MapScreen> {
               children: categories
                   .map(
                     (c) => Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: ChoiceChip(
-                        label: Text(c),
-                        selected: c == category,
-                        onSelected: (_) => setState(() => category = c),
-                      ),
-                    ),
-                  )
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    label: Text(c),
+                    selected: c == category,
+                    onSelected: (_) => setState(() => category = c),
+                  ),
+                ),
+              )
                   .toList(),
             ),
           ),
@@ -239,7 +393,7 @@ class _MapScreenState extends State<MapScreen> {
           )
         else if (!emergencyMode)
           ...listings.map(
-            (l) => Column(
+                (l) => Column(
               children: [
                 ListingCard(store: widget.store, listing: l),
                 if (position != null)

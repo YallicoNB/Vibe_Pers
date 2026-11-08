@@ -51,16 +51,17 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       final store = widget.store;
       final pages = [
-        CommunityScreen(store: store, isActive: tab == 0), // NUEVO
-        MapScreen(key: ValueKey(store.mapTarget?.id), store: store),
+        CommunityScreen(store: store, isActive: tab == 0),
+        MapScreen(key: ValueKey(store.mapTarget?.id), store: store, isActive: tab == 1),
         MarketScreen(
           store: store,
+          isActive: tab == 2,
           onShowOnMap: (Listing listing) {
             store.mapTarget = listing;
             setState(() => tab = 1);
           },
         ),
-        EmergencyScreen(store: store, isActive: tab == 3), // NUEVO
+        EmergencyScreen(store: store, isActive: tab == 3),
       ];
       return Scaffold(
         appBar: AppBar(
