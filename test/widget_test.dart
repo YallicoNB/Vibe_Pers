@@ -29,7 +29,7 @@ void main() {
     ];
     store.bindProfile('usuario-voto', 'Yo', c, border);
     final service = store.localListings.firstWhere(
-      (l) => l.id == 'demo-reparacion',
+          (l) => l.id == 'demo-reparacion',
     );
     expect(await store.toggleVoteFor(service), isTrue);
     final reloaded = await DemoStore.load();
@@ -73,7 +73,7 @@ void main() {
 
   test('el PDF del distrito elegido aparece primero', () {
     final chosica = demoAreas.firstWhere(
-      (area) => area.name == 'Lurigancho-Chosica',
+          (area) => area.name == 'Lurigancho-Chosica',
     );
     expect(orderedDemoAreas(chosica).first.name, 'Lurigancho-Chosica');
     expect(
@@ -88,7 +88,7 @@ void main() {
 
   test(
     'un vecino no puede votar dos veces ni recomendarse a sí mismo',
-    () async {
+        () async {
       final store = await DemoStore.load();
       final service = store.listings.firstWhere((l) => l.id == 's1');
       final initial = service.voters.length;
@@ -141,9 +141,23 @@ void main() {
     await tester.pumpWidget(VibePersApp(store: store));
     await tester.tap(find.text('Omitir'));
     await tester.pumpAndSettle();
+
+    // Al cerrar la intro, saltará el nuevo diálogo del tutorial de la comunidad. Lo omitimos también.
+    if (find.text('Omitir').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Omitir').last);
+      await tester.pumpAndSettle();
+    }
+
     expect(find.text('Mi comunidad'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.storefront_outlined).last);
     await tester.pumpAndSettle();
+
+    // Al entrar a Mercado saltará su respectivo tutorial. Lo omitimos.
+    if (find.text('Omitir').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Omitir').last);
+      await tester.pumpAndSettle();
+    }
+
     expect(find.text('Mercado y solidaridad'), findsOneWidget);
   });
 
@@ -151,9 +165,18 @@ void main() {
     final store = await DemoStore.load();
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: EmergencyScreen(store: store)),
+        // SOLUCIÓN: Agregamos isActive: true para que el constructor coincida
+        home: Scaffold(body: EmergencyScreen(store: store, isActive: true)),
       ),
     );
+
+    // Omitimos el cuadro de diálogo del tutorial que aparece al cargar la pantalla
+    await tester.pumpAndSettle();
+    if (find.text('Omitir').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Omitir').last);
+      await tester.pumpAndSettle();
+    }
+
     await Scrollable.ensureVisible(
       tester.element(find.byIcon(Icons.sos)),
       alignment: 0.5,
