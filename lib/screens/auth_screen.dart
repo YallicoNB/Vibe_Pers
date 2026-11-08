@@ -231,7 +231,24 @@ class _AccessScreenState extends State<AccessScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Vibe Pers')),
+    appBar: AppBar(
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset(
+              'assets/Logo_vibePers.jpeg',
+              height: 32,
+              width: 32,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Text('Vibe Pers'),
+        ],
+      ),
+    ),
     body: Center(
       child: SingleChildScrollView(
         child: ConstrainedBox(
